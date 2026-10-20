@@ -1,0 +1,12 @@
+# ---- 构建产物（CMake 生成，可随时重建）----
+/build/
+
+# ---- IDE / 编辑器 ----
+.vs/
+.vscode/
+*.user
+CMakeUserPresets.json
+
+# ---- Windows 杂项 ----
+Thumbs.db
+Desktop.ini

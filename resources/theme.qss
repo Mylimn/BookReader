@@ -1,0 +1,208 @@
+/* 样式表模板：颜色以 @token@ 占位，运行时由 Theme::buildStyleSheet() 替换。
+   新增主题只需在 C++ 侧提供一套 ColorScheme，本文件无需改动。 */
+
+QDialog {
+    background: @window-bg@;
+}
+
+QWidget {
+    color: @text@;
+    font-size: 13px;
+}
+
+/* ---- 无边框窗口：外层透明留白容纳阴影，内层承载背景 / 圆角 ---- */
+#windowFrame {
+    background: @window-bg@;
+    border: 1px solid @border@;
+    border-radius: 10px;
+}
+
+/* 最大化时收起圆角，避免边缘露出透明缝隙 */
+#windowFrame[maximized="true"] {
+    border-radius: 0;
+}
+
+/* ---- 自绘标题栏 ---- */
+#titleBar {
+    background: transparent;
+}
+
+#titleBarLabel {
+    color: @text@;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#titleBarButton, #titleBarCloseButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 12px;
+    color: @text@;
+}
+
+#titleBarButton:hover {
+    background: @hover@;
+}
+
+#titleBarButton:pressed {
+    background: @pressed@;
+}
+
+#titleBarCloseButton:hover, #titleBarCloseButton:pressed {
+    background: @close-hover@;
+    color: #FFFFFF;
+}
+
+/* ---- 菜单栏 ---- */
+QMenuBar {
+    background: @window-bg@;
+    border-bottom: 1px solid @border@;
+    padding: 3px 6px;
+}
+
+QMenuBar::item {
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: transparent;
+}
+
+QMenuBar::item:selected {
+    background: @hover@;
+}
+
+QMenu {
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 8px;
+    padding: 6px;
+}
+
+QMenu::item {
+    padding: 7px 24px 7px 14px;
+    border-radius: 6px;
+}
+
+QMenu::item:selected {
+    background: @hover@;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: @border@;
+    margin: 6px 8px;
+}
+
+/* ---- 工具栏：扁平圆形悬浮反馈 ---- */
+QToolBar {
+    background: @window-bg@;
+    border: none;
+    border-bottom: 1px solid @border@;
+    padding: 8px 12px;
+    spacing: 8px;
+}
+
+QToolButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 7px 16px;
+}
+
+QToolButton:hover {
+    background: @hover@;
+}
+
+QToolButton:pressed {
+    background: @pressed@;
+}
+
+QToolButton:disabled {
+    color: @text-muted@;
+}
+
+/* ---- 目录面板：与正文区分开的浮层底色 ---- */
+#tocPanel {
+    background: @surface@;
+    border-right: 1px solid @border@;
+}
+
+#tocList {
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 2px;
+}
+
+#tocList::item {
+    padding: 7px 10px;
+    border-radius: 6px;
+}
+
+#tocList::item:hover {
+    background: @hover@;
+}
+
+#tocList::item:selected {
+    background: @accent@;
+    color: @page-bg@;
+}
+
+/* ---- 阅读区：留白充足，正文与页面同底色 ---- */
+QTextBrowser {
+    background: @page-bg@;
+    color: @page-text@;
+    border: none;
+    padding: 32px 56px;
+    selection-background-color: @accent@;
+    selection-color: @page-bg@;
+}
+
+/* ---- 极简滚动条：细窄、无箭头、悬停加深 ---- */
+QScrollBar:vertical {
+    background: transparent;
+    width: 12px;
+    margin: 4px 3px 4px 0;
+}
+
+QScrollBar::handle:vertical {
+    background: @scroll-handle@;
+    border-radius: 4px;
+    min-height: 36px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: @scroll-handle-hover@;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 12px;
+    margin: 0 4px 3px 4px;
+}
+
+QScrollBar::handle:horizontal {
+    background: @scroll-handle@;
+    border-radius: 4px;
+    min-width: 36px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: @scroll-handle-hover@;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: transparent;
+}
