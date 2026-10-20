@@ -21,6 +21,7 @@
 #include <QScrollBar>
 #include <QSequentialAnimationGroup>
 #include <QShowEvent>
+#include <QStackedWidget>
 #include <QStyle>
 #include <QTimer>
 #include <QToolBar>
@@ -32,6 +33,7 @@
 #include "parsers/TxtParser.h"
 #include "render/DocumentRenderer.h"
 #include "ui/ReaderView.h"
+#include "ui/StartPage.h"
 #include "ui/TitleBar.h"
 
 namespace reader::ui
@@ -53,6 +55,10 @@ constexpr int kMinWindowHeight = 360;
 
 // 目录面板宽度
 constexpr int kTocPanelWidth = 200;
+
+// 内容区 QStackedWidget 的两页索引（FR-07）
+constexpr int kReaderPage = 0;
+constexpr int kStartPage = 1;
 
 // 传给 ReaderView::showChapter 的负偏移哨兵：表示定位到章末（跨章回翻用）
 constexpr int kChapterEndOffset = -1;
@@ -99,13 +105,13 @@ MainWindow::MainWindow(QWidget *parent)
     m_titleBar = new TitleBar(m_frame);
     m_readerView = new ReaderView(m_frame);
 
-    // 阅读区 = 左侧目录面板 + 右侧正文；目录默认隐藏，由工具栏「目录」按钮切换（FR-03）
-    m_contentArea = new QWidget(m_frame);
-    auto *contentLayout = new QHBoxLayout(m_contentArea);
+    // 阅读页 = 左侧目录面板 + 右侧正文；目录默认隐藏，由工具栏「目录」按钮切换（FR-03）
+    m_readerArea = new QWidget(m_frame);
+    auto *contentLayout = new QHBoxLayout(m_readerArea);
     contentLayout->setContentsMargins(0, 0, 0, 0);
     contentLayout->setSpacing(0);
 
-    m_tocPanel = new QWidget(m_contentArea);
+    m_tocPanel = new QWidget(m_readerArea);
     m_tocPanel->setObjectName(QStringLiteral("tocPanel"));
     m_tocPanel->setFixedWidth(kTocPanelWidth);
 
@@ -120,12 +126,23 @@ MainWindow::MainWindow(QWidget *parent)
     contentLayout->addWidget(m_readerView, 1);
     m_tocPanel->setVisible(false);
 
+    // 内容区在「阅读页」与「起始页」两页之间互切：没有打开书籍时停在起始页（FR-07）
+    m_startPage = new StartPage(m_frame);
+    m_contentStack = new QStackedWidget(m_frame);
+    m_contentStack->addWidget(m_readerArea); // 索引 kReaderPage
+    m_contentStack->addWidget(m_startPage);  // 索引 kStartPage
+
     createActions(); // 创建 m_menuBar / m_toolBar（随后插入到布局中）
 
     frameLayout->addWidget(m_titleBar);
     frameLayout->addWidget(m_menuBar);
     frameLayout->addWidget(m_toolBar);
-    frameLayout->addWidget(m_contentArea, 1);
+    frameLayout->addWidget(m_contentStack, 1);
+
+    // 起始页只收集用户意图，读写存储仍由主窗口负责（FR-07）
+    connect(m_startPage, &StartPage::openRequested, this, &MainWindow::loadBook);
+    connect(m_startPage, &StartPage::removeRequested, this, &MainWindow::removeRecentBook);
+    connect(m_startPage, &StartPage::browseRequested, this, &MainWindow::openFile);
 
     // 目录项单击 → 跳到对应章节
     connect(m_tocList, &QListWidget::itemClicked, this,
@@ -161,6 +178,11 @@ MainWindow::MainWindow(QWidget *parent)
     m_readerView->setFontSize(settings.fontSize);
     applyTheme(themeFromString(settings.theme));
 
+    // 启动即停在起始页，列出最近打开过的书（FR-07）
+    refreshRecentBooks();
+    showStartPage();
+    updateBookmarkUi();
+
     updateWindowTitle(tr("Reader"));
     resize(900, 700);
 }
@@ -174,8 +196,14 @@ void MainWindow::createActions()
     m_openAction->setShortcut(QKeySequence::Open);
     connect(m_openAction, &QAction::triggered, this, &MainWindow::openFile);
 
+    // 从阅读界面回到最近书起始页（FR-07 的"返回起始界面"）
+    m_homeAction = new QAction(tr("返回首页(&H)"), this);
+    connect(m_homeAction, &QAction::triggered, this, &MainWindow::goHome);
+
     QMenu *fileMenu = m_menuBar->addMenu(tr("文件(&F)"));
     fileMenu->addAction(m_openAction);
+    fileMenu->addSeparator();
+    fileMenu->addAction(m_homeAction);
 
     // ---- 视图菜单：主题切换（FR-05）----
     auto *themeGroup = new QActionGroup(this);
@@ -207,6 +235,23 @@ void MainWindow::createActions()
     viewMenu->addAction(m_increaseFontAction);
     viewMenu->addAction(m_decreaseFontAction);
 
+    // ---- 书签菜单：标记 / 跳转 / 清除（FR-08）----
+    m_markBookmarkAction = new QAction(tr("标记当前位置"), this);
+    m_markBookmarkAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+D")));
+    connect(m_markBookmarkAction, &QAction::triggered, this, &MainWindow::markBookmark);
+
+    m_jumpBookmarkAction = new QAction(tr("跳转到书签"), this);
+    connect(m_jumpBookmarkAction, &QAction::triggered, this, &MainWindow::jumpToBookmark);
+
+    m_clearBookmarkAction = new QAction(tr("清除书签"), this);
+    connect(m_clearBookmarkAction, &QAction::triggered, this, &MainWindow::clearBookmark);
+
+    QMenu *bookmarkMenu = m_menuBar->addMenu(tr("书签(&B)"));
+    bookmarkMenu->addAction(m_markBookmarkAction);
+    bookmarkMenu->addAction(m_jumpBookmarkAction);
+    bookmarkMenu->addSeparator();
+    bookmarkMenu->addAction(m_clearBookmarkAction);
+
     // ---- 阅读工具栏 ----
     m_tocAction = new QAction(tr("目录"), this);
     m_tocAction->setCheckable(true);
@@ -218,6 +263,10 @@ void MainWindow::createActions()
     m_nextPageAction = new QAction(tr("下一页"), this);
     connect(m_nextPageAction, &QAction::triggered, this, &MainWindow::goToNextPage);
 
+    // 情境按钮：未标记时点它=标记当前位置，已标记时点它=跳回书签（FR-08）
+    m_bookmarkAction = new QAction(tr("标记书签"), this);
+    connect(m_bookmarkAction, &QAction::triggered, this, &MainWindow::toggleBookmark);
+
     m_toolBar = new QToolBar(m_frame);
     m_toolBar->setMovable(false);
     m_toolBar->addAction(m_tocAction);
@@ -225,13 +274,16 @@ void MainWindow::createActions()
     m_toolBar->addAction(m_previousPageAction);
     m_toolBar->addAction(m_nextPageAction);
     m_toolBar->addSeparator();
+    m_toolBar->addAction(m_bookmarkAction);
+    m_toolBar->addSeparator();
     m_toolBar->addAction(m_decreaseFontAction);
     m_toolBar->addAction(m_increaseFontAction);
 
-    // 未打开书籍时不可翻页、也没有目录可看
+    // 未打开书籍时不可翻页、也没有目录与书签可操作
     m_previousPageAction->setEnabled(false);
     m_nextPageAction->setEnabled(false);
     m_tocAction->setEnabled(false);
+    m_homeAction->setEnabled(false);
 }
 
 void MainWindow::applyTheme(ThemeMode mode)
@@ -348,12 +400,133 @@ void MainWindow::loadBook(const QString &filePath)
     showChapter(chapterIndex, progress.charOffset);
     updateWindowTitle(tr("%1 — Reader").arg(m_currentBook.title));
 
+    // 切到阅读页，并载入该书既有的书签状态（FR-08）
+    showReaderPage();
+    m_homeAction->setEnabled(true);
+    refreshBookmarkState();
+
     // PRD 第 5 节：编码无法识别时已回退 UTF-8，正文可能有乱码，需要明确提示
     if (m_currentBook.encodingFallbackUsed) {
         QMessageBox::information(this, tr("编码提示"),
                                  tr("无法识别该文件的文本编码，已按 UTF-8 打开。"
                                     "若正文出现乱码，请把文件另存为 UTF-8 或 GBK 后再打开。"));
     }
+}
+
+void MainWindow::goHome()
+{
+    if (m_currentBookPath.isEmpty()) {
+        return; // 已经在起始页
+    }
+
+    saveProgressNow(); // 离开阅读页前确保进度落盘（FR-06）
+
+    // 清空当前书籍上下文：起始页不再需要它，也能让 scheduleProgressSave 直接返回
+    m_currentBookPath.clear();
+    m_currentBookSize = 0;
+    m_currentBook = reader::document::Book{};
+    m_chapterIndex = 0;
+    m_hasBookmark = false;
+    m_bookmark = reader::storage::Bookmark{};
+
+    m_tocList->clear();
+    m_tocAction->setChecked(false);
+    m_tocAction->setEnabled(false);
+    m_previousPageAction->setEnabled(false);
+    m_nextPageAction->setEnabled(false);
+    m_homeAction->setEnabled(false);
+
+    updateBookmarkUi();
+    refreshRecentBooks(); // 刚读完的这本书已在列表最前，需重新加载
+    showStartPage();
+    updateWindowTitle(tr("Reader"));
+}
+
+void MainWindow::showStartPage()
+{
+    m_contentStack->setCurrentIndex(kStartPage);
+}
+
+void MainWindow::showReaderPage()
+{
+    m_contentStack->setCurrentIndex(kReaderPage);
+}
+
+void MainWindow::refreshRecentBooks()
+{
+    m_startPage->setRecentBooks(m_storage.loadRecentBooks());
+}
+
+void MainWindow::removeRecentBook(const QString &filePath, qint64 fileSize)
+{
+    m_storage.removeRecentBook(filePath, fileSize);
+    refreshRecentBooks(); // 列表立即反映移除结果
+}
+
+void MainWindow::refreshBookmarkState()
+{
+    m_hasBookmark = m_storage.loadBookmark(m_currentBookPath, m_currentBookSize, m_bookmark);
+    updateBookmarkUi();
+}
+
+void MainWindow::updateBookmarkUi()
+{
+    const bool bookOpen = !m_currentBookPath.isEmpty();
+
+    m_bookmarkAction->setEnabled(bookOpen);
+    m_markBookmarkAction->setEnabled(bookOpen);
+    m_jumpBookmarkAction->setEnabled(bookOpen && m_hasBookmark);
+    m_clearBookmarkAction->setEnabled(bookOpen && m_hasBookmark);
+
+    // 按钮文字随状态变化（两种文案同为 4 个字，工具栏宽度不会跳动）
+    m_bookmarkAction->setText(m_hasBookmark ? tr("跳转书签") : tr("标记书签"));
+    m_bookmarkAction->setToolTip(m_hasBookmark ? tr("跳转到已标记的位置")
+                                               : tr("把当前位置标记为书签"));
+}
+
+void MainWindow::toggleBookmark()
+{
+    if (m_hasBookmark) {
+        jumpToBookmark();
+    } else {
+        markBookmark();
+    }
+}
+
+void MainWindow::markBookmark()
+{
+    if (m_currentBookPath.isEmpty()) {
+        return;
+    }
+
+    reader::storage::Bookmark bookmark;
+    bookmark.chapterIndex = m_chapterIndex;
+    bookmark.charOffset = m_readerView->currentCharOffset();
+    m_storage.saveBookmark(m_currentBookPath, m_currentBookSize, bookmark);
+
+    m_bookmark = bookmark;
+    m_hasBookmark = true;
+    updateBookmarkUi();
+}
+
+void MainWindow::jumpToBookmark()
+{
+    if (!m_hasBookmark) {
+        return;
+    }
+    showChapter(m_bookmark.chapterIndex, m_bookmark.charOffset);
+}
+
+void MainWindow::clearBookmark()
+{
+    if (!m_hasBookmark) {
+        return;
+    }
+
+    m_storage.clearBookmark(m_currentBookPath, m_currentBookSize);
+    m_hasBookmark = false;
+    m_bookmark = reader::storage::Bookmark{};
+    updateBookmarkUi();
 }
 
 void MainWindow::showChapter(int chapterIndex, int startOffset)

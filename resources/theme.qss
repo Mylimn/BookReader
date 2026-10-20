@@ -148,6 +148,59 @@ QToolButton:disabled {
     color: @page-bg@;
 }
 
+/* ---- 起始页：最近打开列表（FR-07）---- */
+#startPage {
+    background: @page-bg@;
+}
+
+#startPageTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: @text@;
+}
+
+#startPageHint {
+    color: @text-muted@;
+}
+
+#recentList {
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 2px;
+}
+
+#recentList::item {
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 15px;
+}
+
+#recentList::item:hover {
+    background: @hover@;
+}
+
+#recentList::item:selected {
+    background: @accent@;
+    color: @page-bg@;
+}
+
+#startPageBrowse {
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 8px;
+    padding: 8px 22px;
+    color: @text@;
+}
+
+#startPageBrowse:hover {
+    background: @hover@;
+}
+
+#startPageBrowse:pressed {
+    background: @pressed@;
+}
+
 /* ---- 阅读区：留白充足，正文与页面同底色 ---- */
 QTextBrowser {
     background: @page-bg@;

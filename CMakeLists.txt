@@ -36,6 +36,9 @@ add_executable(Reader
     src/ui/ReaderView.h
     src/ui/ReaderView.cpp
 
+    src/ui/StartPage.h
+    src/ui/StartPage.cpp
+
     src/ui/TitleBar.h
     src/ui/TitleBar.cpp
 
