@@ -77,3 +77,11 @@ target_link_libraries(Reader PRIVATE
     Qt6::Core5Compat
     libzip::zip
 )
+
+# ---- Windows 可执行文件资源 ----
+# WIN32_EXECUTABLE：改用 Windows 子系统，避免发布版带着控制台窗口启动
+# Reader.rc：exe 图标 + 版本信息（见 TECH_DESIGN 3.11）
+if(WIN32)
+    set_target_properties(Reader PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_sources(Reader PRIVATE resources/Reader.rc)
+endif()

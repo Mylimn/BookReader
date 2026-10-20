@@ -1,0 +1,33 @@
+// Reader 的 Windows 资源：可执行文件图标 + 版本信息
+// NOTE: keep this file strictly ASCII. rc.exe does not reliably parse
+// UTF-8 without BOM, and a mis-decoded byte silently breaks tokenization.
+#include <windows.h>
+
+IDI_ICON1 ICON "reader.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 0,1,0,0
+ PRODUCTVERSION 0,1,0,0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "FileDescription", "Reader - a lightweight EPUB/TXT ebook reader"
+            VALUE "FileVersion", "0.1.0.0"
+            VALUE "InternalName", "Reader"
+            VALUE "OriginalFilename", "Reader.exe"
+            VALUE "ProductName", "Reader"
+            VALUE "ProductVersion", "0.1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END

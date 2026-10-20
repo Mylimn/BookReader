@@ -51,6 +51,35 @@ libzip 经 vcpkg 引入（三元组用动态的 `x64-windows`，与 Qt 的 `/MD`
 ./build/Debug/Reader.exe   # 若 Qt 未加入 PATH，需先把 <Qt6>/bin 加入 PATH
 ```
 
+**发布（打包便携版）**
+
+发布产物是一个解压即用的 zip，目标机器无需安装 Qt 与 VC++ 运行库。设计口径见 `TECH_DESIGN.md` 3.11。
+
+```bash
+# 1) Release 编译（vcpkg toolchain 会把 zip.dll / z.dll / bz2.dll 部署到 build/Release/）
+cmake --build build --config Release
+```
+
+```powershell
+# 2) 暂存：把 exe 与 vcpkg 的 DLL 拷到独立目录（下面按本机路径调整）
+$dist = "build\dist"
+New-Item -ItemType Directory -Force $dist | Out-Null
+Copy-Item build\Release\Reader.exe, build\Release\zip.dll, build\Release\z.dll, build\Release\bz2.dll -Destination $dist
+
+# 3) 补齐 Qt 依赖（含 platforms/qwindows.dll 与 imageformats/qico.dll）
+& "<Qt6>\bin\windeployqt.exe" --release --no-translations --no-opengl-sw `
+    --no-system-d3d-compiler --compiler-runtime "$dist\Reader.exe"
+
+# 4) 补 MSVC 运行库：--compiler-runtime 在 VCINSTALLDIR 未设置时不会真的拷贝，
+#    需手工从 <VS>\VC\Redist\MSVC\<版本>\x64\Microsoft.VC143.CRT\ 取
+#    msvcp140.dll / vcruntime140.dll / vcruntime140_1.dll 放进 $dist
+
+# 5) 压缩（zip 根目录即 $dist 的内容）
+Compress-Archive -Path "$dist\*" -DestinationPath "build\Reader-v0.1.0-win64.zip" -Force
+```
+
+**验证**：把 `PATH` 收窄到仅系统目录后启动 `$dist\Reader.exe`，能正常起来即说明依赖自包含。
+
 **约定**：任何提交前，工程必须能在上述流程下**编译通过并启动**。
 
 ## 3. 硬性约定

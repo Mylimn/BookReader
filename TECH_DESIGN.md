@@ -168,6 +168,28 @@ UI 形态为**左侧可折叠面板**（`QListWidget`）+ 工具栏「目录」�
 
 **取舍**：起始页的展示名取**文件名（去扩展名）**，不解析书籍元数据——启动时不必打开、更不必解压每个文件。真正的书名要打开书之后才有；若后续需要，可在 `books[]` 里补一个 `title` 字段由解析结果写入（与 3.4 的书籍身份方案兼容）。
 
+### 3.11 发布打包（v0.1.0）
+
+**目标**：产出一个解压即用的便携 zip——目标机器无需安装 Qt，也无需预装 VC++ 运行库。
+
+**工程侧改动**：
+
+- `WIN32_EXECUTABLE TRUE`：此前可执行文件是 **CONSOLE 子系统**，启动时会附带一个控制台窗口。改为 Windows 子系统后不再出现（CMake 会自动补 `/ENTRY:mainCRTStartup`，普通 `main()` 照常可用）。
+- `resources/Reader.rc`：exe 文件图标 + 版本信息，`FILEVERSION` 与 `project(Reader VERSION 0.1.0)` 对齐。**该文件保持纯 ASCII**——rc.exe 不保证正确解析无 BOM 的 UTF-8，一个被误解码的字节会静默破坏词法分析。
+- `resources/reader.ico`：含 256/128/64/48/32/24/16 七种尺寸、圆角带 alpha 通道。同一份文件两处复用：经 `.rc` 作 exe 文件图标，经 `.qrc` 作窗口与任务栏图标（`main.cpp` 中 `QIcon(":/reader.ico")`）。
+
+**打包步骤**（命令见 AGENTS.md 第 2 节）：
+
+1. `cmake --build build --config Release`。vcpkg toolchain 会把 `zip.dll` / `z.dll` / `bz2.dll`（Release 版、无 `d` 后缀）自动部署到 `build/Release/`。
+2. 把 `build/Release/` 下的 exe 与上述三个 DLL 拷入暂存目录。
+3. 对暂存目录里的 exe 运行 `windeployqt`，补齐 `Qt6Core/Gui/Widgets/Core5Compat`、`platforms/qwindows.dll`、`styles/`、`imageformats/`（其中的 `qico.dll` 是窗口图标所必需）。
+4. **补 MSVC 运行库**：`--compiler-runtime` 在未设置 `VCINSTALLDIR` 时只会给一句 warning、不会真的拷贝，需手工从 `<VS>\VC\Redist\MSVC\<版本>\x64\Microsoft.VC143.CRT\` 取 `msvcp140.dll`、`vcruntime140.dll`、`vcruntime140_1.dll`。
+5. 压缩成 zip（zip 根目录即暂存目录内容，不含外层文件夹）。
+
+**验证口径**：把 `PATH` 收窄到仅系统目录后再启动产物 exe，能正常起来即证明依赖自包含（不依赖开发机上的 Qt 或环境变量）。v0.1.0 产物为 24 个文件、约 13.7 MB。
+
+**遗留**：打包目前是手工步骤，尚未固化进 CMake。后续可用 `install()` + `qt_generate_deploy_app_script`，或交给 CI 完成。
+
 ## 4. 关键流程
 
 **打开书籍**
@@ -267,6 +289,7 @@ Reader/
 3. **EPUB**：解压 + 解析 OPF + 目录 + 渲染 —— 已完成（实现见 3.7 / 3.8），已用真实 EPUB 验证
 4. **收尾**：TXT 编码探测 —— 已完成（见 3.9）
 5. **迭代二**：最近书列表（FR-07）与单书签（FR-08）—— 已完成（见 3.10）
+6. **发布**：v0.1.0 便携包（Release 构建 + 打包 + GitHub Release）—— 已完成（见 3.11）
 
 第 1 步刻意选 TXT，是为了在不引入 libzip/XML 复杂度的情况下，先把"模型 → 渲染 → 视图 → 存储"这条主链路打通。
 
